@@ -1,0 +1,35 @@
+{
+  "threshold": 0.75,
+  "n_samples": 1328,
+  "n_positive": 206,
+  "positive_rate": 0.15512047708034515,
+  "timestamp": "2026-04-26T17:00:30.461989",
+  "f1": 0.8867,
+  "precision": 0.9,
+  "recall": 0.8738,
+  "roc_auc": 0.9859,
+  "avg_precision": 0.945,
+  "accuracy": 0.9654,
+  "false_alarm_rate": 0.0178,
+  "confusion_matrix": [
+    [
+      1102,
+      20
+    ],
+    [
+      26,
+      180
+    ]
+  ],
+  "tp": 180,
+  "fp": 20,
+  "tn": 1102,
+  "fn": 26,
+  "plots": {
+    "confusion_matrix": "data\\evaluation\\confusion_matrix.png",
+    "roc_curve": "data\\evaluation\\roc_curve.png",
+    "pr_curve": "data\\evaluation\\pr_curve.png",
+    "training": "data\\evaluation\\training_history.png",
+    "score_dist": "data\\evaluation\\score_distribution.png"
+  }
+}

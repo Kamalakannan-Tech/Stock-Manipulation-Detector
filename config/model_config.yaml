@@ -1,0 +1,26 @@
+model:
+  d_model: 64
+  nhead: 4
+  num_layers: 2
+  dropout: 0.1
+
+training:
+  batch_size: 32
+  learning_rate: 0.0001
+  epochs: 50
+  weight_decay: 0.01
+  patience: 10
+
+preprocessing:
+  window_size: 60
+  stride: 15
+
+labeling:
+  price_spike_threshold: 0.15
+  volume_threshold: 3.0
+  crash_threshold: -0.10
+  time_window_hours: 4
+
+inference:
+  manipulation_threshold: 0.7
+  sector_deviation_threshold: 2.0

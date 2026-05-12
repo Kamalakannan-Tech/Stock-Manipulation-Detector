@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StockGuard — AI Manipulation Detection</title>
+    <meta name="description"
+        content="Real-time AI-powered stock price manipulation detection system using Temporal Fusion Transformer" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet" />
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Luxon (date adapter for Chart.js financial) -->
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+    <!-- Candlestick / OHLC chart type -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.1.1/dist/chartjs-chart-financial.min.js"></script>
+    <!-- React + ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #0a0f1e;
+            --bg2: #0e1628;
+            --surface: rgba(255, 255, 255, 0.04);
+            --surface2: rgba(255, 255, 255, 0.07);
+            --border: rgba(255, 255, 255, 0.08);
+            --text: #e8eaf6;
+            --text2: #8892b0;
+            --accent: #4f8ef7;
+            --accent2: #7c5be8;
+            --green: #00e676;
+            --yellow: #ffd740;
+            --orange: #ff9100;
+            --red: #ff3d57;
+            --radius: 14px;
+            --radius-sm: 8px;
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            --glow-accent: 0 0 20px rgba(79, 142, 247, 0.25);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ── Scrollbar ───────────────────────────────────── */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        /* ── Layout ──────────────────────────────────────── */
+        .app {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+            height: 64px;
+            background: rgba(10, 15, 30, 0.9);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 800;
+            font-size: 1.2rem;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green);
+            animation: pulse 2s infinite;
+        }
+
+        .live-badge {
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: var(--green);
+            letter-spacing: 0.08em;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .last-updated {
+            font-size: 0.68rem;
+            color: var(--text2);
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .4
+            }
+        }
+
+        .status-text {
+            font-size: 0.75rem;
+            color: var(--text2);
+        }
+
+        .refresh-btn {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 6px 14px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+
+        .refresh-btn:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        main {
+            flex: 1;
+            padding: 28px 32px;
+            max-width: 1600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* ── Section headings ────────────────────────────── */
+        .section-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text2);
+            margin-bottom: 14px;
+        }
+
+        /* ── Grid helpers ────────────────────────────────── */
+        .grid-6 {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 16px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 16px;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        /* ── Card ────────────────────────────────────────── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        /* ── Ticker card ──────────────────────────────────── */
+        .ticker-card {
+            cursor: pointer;
+        }
+
+        .ticker-card.selected {
+            border-color: var(--accent);
+            box-shadow: var(--glow-accent);
+        }
+
+        .tc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .tc-symbol {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .tc-badge {
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .badge-LOW {
+            background: rgba(0, 230, 118, 0.15);
+            color: var(--green);
+        }
+
+        .badge-MEDIUM {
+            background: rgba(255, 215, 64, 0.15);
+            color: var(--yellow);
+        }
+
+        .badge-HIGH {
+            background: rgba(255, 145, 0, 0.15);
+            color: var(--orange);
+        }
+
+        .badge-CRITICAL {
+            background: rgba(255, 61, 87, 0.15);
+            color: var(--red);
+        }
+
+        .badge-UNKNOWN {
+            background: rgba(136, 146, 176, 0.15);
+            color: var(--text2);
+        }
+
+        /* Probability gauge */
+        .gauge-wrap {
+            position: relative;
+            width: 100%;
+            margin: 8px 0;
+        }
+
+        .gauge-bar {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.08);
+            overflow: hidden;
+        }
+
+        .gauge-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .gauge-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.68rem;
+            color: var(--text2);
+            margin-top: 4px;
+        }
+
+        .tc-price {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+
+        .tc-sub {
+            font-size: 0.75rem;
+            color: var(--text2);
+            margin-top: 2px;
+        }
+
+        .prob-value {
+            font-size: 1.8rem;
+            font-weight: 800;
+        }
+
+        /* ── Stat pills ──────────────────────────────────── */
+        .stats-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .stat-pill {
+            background: var(--surface2);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 0.7rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        .stat-pill .label {
+            color: var(--text2);
+            font-size: 0.6rem;
+            text-transform: uppercase;
+        }
+
+        /* ── Chart panel ──────────────────────────────────── */
+        .chart-panel {
+            grid-column: 1 / -1;
+        }
+
+        .chart-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .tab-btn {
+            padding: 6px 14px;
+            border-radius: var(--radius-sm);
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text2);
+            cursor: pointer;
+            font-size: 0.78rem;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+
+        /* ── Alert table ──────────────────────────────────── */
+        .alert-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        .alert-table th {
+            text-align: left;
+            color: var(--text2);
+            font-weight: 500;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .alert-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .alert-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .alert-table tr:hover td {
+            background: var(--surface2);
+        }
+
+        .sev-chip {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        /* ── Metrics panel ────────────────────────────────── */
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 12px;
+        }
+
+        .metric-item {
+            background: var(--surface2);
+            border-radius: var(--radius-sm);
+            padding: 14px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 1.6rem;
+            font-weight: 800;
+        }
+
+        .metric-label {
+            font-size: 0.65rem;
+            color: var(--text2);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        /* ── Image plots ──────────────────────────────────── */
+        .plots-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .plot-card img {
+            width: 100%;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+        }
+
+        .plot-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-transform: capitalize;
+        }
+
+        /* ── Empty / loading states ──────────────────────── */
+        .empty {
+            text-align: center;
+            padding: 48px;
+            color: var(--text2);
+        }
+
+        .empty .icon {
+            font-size: 2.5rem;
+            margin-bottom: 12px;
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* ── Tabs (main nav) ──────────────────────────────── */
+        .nav-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+        }
+
+        .nav-tab {
+            padding: 8px 20px;
+            border-radius: var(--radius-sm);
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text2);
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .nav-tab.active {
+            background: var(--surface2);
+            border-color: var(--border);
+            color: var(--text);
+        }
+
+        .nav-tab:hover:not(.active) {
+            color: var(--text);
+        }
+
+        /* ── Responsive ───────────────────────────────────── */
+        @media (max-width: 768px) {
+            header {
+                padding: 0 16px;
+            }
+
+            main {
+                padding: 16px;
+            }
+
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ── Gradient glow accents ────────────────────────── */
+        .glow-header {
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* ── Confidence meter ─────────────────────────────── */
+        .conf-meter {
+            background: var(--surface2);
+            border-radius: var(--radius);
+            padding: 18px 20px 14px;
+            margin-top: 16px;
+        }
+        .conf-meter-title {
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text2);
+            margin-bottom: 14px;
+        }
+        .conf-arc-wrap {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .conf-arc-labels {
+            flex: 1;
+        }
+        .conf-level-chip {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            margin-bottom: 8px;
+        }
+        .conf-level-veryhigh  { background: rgba(0,230,118,0.15);  color: #00e676; }
+        .conf-level-high      { background: rgba(79,142,247,0.15); color: #4f8ef7; }
+        .conf-level-moderate  { background: rgba(255,215,64,0.15); color: #ffd740; }
+        .conf-level-low       { background: rgba(255,145,0,0.15);  color: #ff9100; }
+        .conf-level-verylow   { background: rgba(255,61,87,0.15);  color: #ff3d57; }
+        .conf-level-unknown   { background: rgba(136,146,176,0.15);color: #8892b0; }
+        .conf-score-big {
+            font-size: 2rem;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 2px;
+        }
+        .conf-score-sub {
+            font-size: 0.68rem;
+            color: var(--text2);
+        }
+        .conf-ci-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 12px;
+        }
+        .conf-ci-label {
+            font-size: 0.65rem;
+            color: var(--text2);
+            white-space: nowrap;
+        }
+        .conf-ci-track {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.07);
+            position: relative;
+        }
+        .conf-ci-fill {
+            position: absolute;
+            height: 100%;
+            border-radius: 3px;
+            transition: left 0.6s, width 0.6s;
+        }
+        .conf-ci-dot {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            top: -2px;
+            transform: translateX(-50%);
+            transition: left 0.6s;
+        }
+        .uncertainty-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.68rem;
+            margin-top: 10px;
+        }
+        .uncertainty-row span:first-child { color: var(--text2); }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // ── Config ──────────────────────────────────────────────────────────────────
+        const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:5000/api'
+            : '/api';
+
+        const TICKERS = ['GME', 'AMC', 'TSLA', 'AAPL', 'MSFT', 'NVDA'];
+        const REFRESH_INTERVAL = 20000;  // alerts: 20s
+        const METRICS_INTERVAL = 15000;  // live metrics: 15s
+        const CHART_INTERVAL = 30000;  // chart: 30s
+        const TICKERS_INTERVAL = 30000;  // ticker cards: 30s
+
+        // ── Helpers ──────────────────────────────────────────────────────────────────
+        function riskColor(level) {
+            const map = { LOW: '#00e676', MEDIUM: '#ffd740', HIGH: '#ff9100', CRITICAL: '#ff3d57', UNKNOWN: '#8892b0' };
+            return map[level?.toUpperCase()] || '#8892b0';
+        }
+        function gaugeColor(p) {
+            if (p < 0.35) return '#00e676';
+            if (p < 0.55) return '#ffd740';
+            if (p < 0.75) return '#ff9100';
+            return '#ff3d57';
+        }
+        function currencySymbol(ticker = '') {
+            return (ticker.endsWith('.NS') || ticker.endsWith('.BSE') || ticker.endsWith('.BO')) ? '₹' : '$';
+        }
+        function fmtPrice(v, ticker = '') { return v != null ? `${currencySymbol(ticker)}${Number(v).toFixed(2)}` : '—'; }
+        function fmtPct(v) { return v != null ? `${(v * 100).toFixed(2)}%` : '—'; }
+        function fmtNum(v, d = 4) { return v != null ? Number(v).toFixed(d) : '—'; }
+        function timeAgo(iso) {
+            if (!iso) return '—';
+            const d = new Date(iso); const now = new Date();
+            const s = Math.floor((now - d) / 1000);
+            if (s < 60) return `${s}s ago`;
+            if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+            return `${Math.floor(s / 3600)}h ago`;
+        }
+
+        // ── API hooks ─────────────────────────────────────────────────────────────────
+        function useFetch(url, interval = 0) {
+            const [data, setData] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const load = useCallback(() => {
+                if (!url) return;
+                fetch(url)
+                    .then(r => r.json())
+                    .then(d => { setData(d); setLoading(false); setError(null); })
+                    .catch(e => { setError(e.message); setLoading(false); });
+            }, [url]);
+            useEffect(() => { load(); const t = interval ? setInterval(load, interval) : null; return () => t && clearInterval(t); }, [load, interval]);
+            return { data, loading, error, reload: load };
+        }
+
+        // ── GaugeFill ─────────────────────────────────────────────────────────────────
+        function GaugeBar({ value = 0 }) {
+            const p = Math.min(1, Math.max(0, value));
+            return (
+                <div className="gauge-wrap">
+                    <div className="gauge-bar">
+                        <div className="gauge-fill" style={{ width: `${p * 100}%`, background: gaugeColor(p) }} />
+                    </div>
+                    <div className="gauge-labels"><span>0%</span><span>50%</span><span>100%</span></div>
+                </div>
+            );
+        }
+
+        // ── ConfidenceMeter ───────────────────────────────────────────────────────────
+        function ConfidenceMeter({ confidence_score = 0, confidence_level = 'Unknown',
+                                   uncertainty = 0, confidence_interval = [0, 0] }) {
+            const score   = Math.min(1, Math.max(0, confidence_score));
+            const ci_low  = Math.min(1, Math.max(0, confidence_interval[0] || 0));
+            const ci_high = Math.min(1, Math.max(0, confidence_interval[1] || 0));
+            const std     = Number(uncertainty) || 0;
+
+            // Arc SVG (semicircle, 0-180 deg = 0-1)
+            const R = 52, cx = 64, cy = 68;
+            const toAngle = v => -180 + v * 180;   // degrees from 9-o-clock to 3-o-clock
+            const polar = (deg, r) => {
+                const rad = (deg - 90) * Math.PI / 180;
+                return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+            };
+            const arcPath = (from, to, r) => {
+                if (Math.abs(to - from) < 0.001) return '';
+                const s = polar(from, r), e = polar(to, r);
+                const large = (to - from) > 180 ? 1 : 0;
+                return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`;
+            };
+            const needle = polar(toAngle(score), R - 6);
+
+            // Level → chip class
+            const chipClass = {
+                'Very High': 'conf-level-veryhigh', 'High': 'conf-level-high',
+                'Moderate': 'conf-level-moderate', 'Low': 'conf-level-low',
+                'Very Low': 'conf-level-verylow',
+            }[confidence_level] || 'conf-level-unknown';
+
+            const scoreColor = score >= 0.85 ? '#00e676' : score >= 0.70 ? '#4f8ef7' :
+                               score >= 0.50 ? '#ffd740' : score >= 0.30 ? '#ff9100' : '#ff3d57';
+
+            return (
+                <div className="conf-meter">
+                    <div className="conf-meter-title">🎯 Model Confidence</div>
+                    <div className="conf-arc-wrap">
+                        {/* Arc gauge */}
+                        <svg width="128" height="74" viewBox="0 0 128 74" style={{ flexShrink: 0 }}>
+                            {/* Track */}
+                            <path d={arcPath(-180, 0, R)} stroke="rgba(255,255,255,0.07)"
+                                strokeWidth="10" fill="none" strokeLinecap="round" />
+                            {/* Fill */}
+                            <path d={arcPath(-180, toAngle(score), R)} stroke={scoreColor}
+                                strokeWidth="10" fill="none" strokeLinecap="round"
+                                style={{ filter: `drop-shadow(0 0 6px ${scoreColor}66)`, transition: 'stroke-dashoffset 0.8s' }} />
+                            {/* Needle dot */}
+                            <circle cx={needle.x} cy={needle.y} r="5" fill={scoreColor}
+                                style={{ filter: `drop-shadow(0 0 4px ${scoreColor})` }} />
+                            {/* Centre score */}
+                            <text x={cx} y={cy - 4} textAnchor="middle"
+                                fill={scoreColor} fontSize="16" fontWeight="800"
+                                fontFamily="Inter, sans-serif">
+                                {(score * 100).toFixed(0)}%
+                            </text>
+                            <text x={cx} y={cy + 12} textAnchor="middle"
+                                fill="#8892b0" fontSize="7.5" fontFamily="Inter, sans-serif">
+                                CONFIDENCE
+                            </text>
+                            {/* Arc end labels */}
+                            <text x="10" y="72" fill="#8892b0" fontSize="8" fontFamily="Inter, sans-serif">0%</text>
+                            <text x="108" y="72" fill="#8892b0" fontSize="8" fontFamily="Inter, sans-serif">100%</text>
+                        </svg>
+
+                        {/* Labels */}
+                        <div className="conf-arc-labels">
+                            <span className={`conf-level-chip ${chipClass}`}>{confidence_level}</span>
+                            <div className="conf-score-big" style={{ color: scoreColor }}>
+                                {(score * 100).toFixed(1)}%
+                            </div>
+                            <div className="conf-score-sub">Model certainty score</div>
+                        </div>
+                    </div>
+
+                    {/* 90% Credible Interval */}
+                    {ci_high > 0 && (
+                        <div className="conf-ci-row">
+                            <span className="conf-ci-label">90% CI</span>
+                            <div className="conf-ci-track">
+                                <div className="conf-ci-fill" style={{
+                                    left: `${ci_low * 100}%`,
+                                    width: `${(ci_high - ci_low) * 100}%`,
+                                    background: `${scoreColor}55`,
+                                }} />
+                                <div className="conf-ci-dot" style={{
+                                    left: `${score * 100}%`,
+                                    background: scoreColor,
+                                }} />
+                            </div>
+                            <span className="conf-ci-label">
+                                [{(ci_low * 100).toFixed(1)}% – {(ci_high * 100).toFixed(1)}%]
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Uncertainty */}
+                    <div className="uncertainty-row">
+                        <span>Uncertainty (σ)</span>
+                        <span style={{ fontWeight: 600, color: std < 0.05 ? '#00e676' : std < 0.12 ? '#ffd740' : '#ff3d57' }}>
+                            {(std * 100).toFixed(2)}%
+                        </span>
+                    </div>
+                </div>
+            );
+        }
+
+        // ── TickerCard ────────────────────────────────────────────────────────────────
+        function TickerCard({ data, selected, onClick }) {
+            const { ticker, risk_level = 'UNKNOWN', manipulation_probability = 0,
+                    confidence_level, confidence_score, latest_price, market_open } = data;
+            const prob   = Number(manipulation_probability) || 0;
+            const conf   = Number(confidence_score ?? prob)  || 0;
+            const closed = market_open === false;
+            const chipClass = {
+                'Very High': 'conf-level-veryhigh', 'High': 'conf-level-high',
+                'Moderate': 'conf-level-moderate', 'Low': 'conf-level-low',
+                'Very Low': 'conf-level-verylow',
+            }[confidence_level] || 'conf-level-unknown';
+            return (
+                <div className={`card ticker-card ${selected ? 'selected' : ''}`} onClick={onClick}
+                    style={{ opacity: closed ? 0.75 : 1 }}>
+                    <div className="tc-header">
+                        <div className="tc-symbol">{ticker}</div>
+                        <span className={`tc-badge badge-${(risk_level || 'UNKNOWN').toUpperCase()}`}>
+                            {risk_level || 'UNKNOWN'}
+                        </span>
+                    </div>
+                    <div className="prob-value" style={{ color: gaugeColor(prob) }}>
+                        {(prob * 100).toFixed(1)}%
+                    </div>
+                    <div className="tc-sub" style={{ marginBottom: 10 }}>Manipulation probability</div>
+                    <GaugeBar value={prob} />
+                    {/* Confidence chip below gauge */}
+                    {confidence_level && (
+                        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span className={`conf-level-chip ${chipClass}`}
+                                style={{ fontSize: '0.6rem', padding: '2px 8px' }}>
+                                {confidence_level}
+                            </span>
+                            <span style={{ fontSize: '0.65rem', color: 'var(--text2)' }}>
+                                {(conf * 100).toFixed(1)}% certain
+                            </span>
+                        </div>
+                    )}
+                    {closed && (
+                        <div style={{ fontSize: '0.68rem', color: '#ffd740', marginTop: 6, textAlign: 'center' }}>
+                            🌙 Market Closed — last session data
+                        </div>
+                    )}
+                    {latest_price != null && (
+                        <div className="tc-price">{fmtPrice(latest_price, ticker)}</div>
+                    )}
+                </div>
+            );
+        }
+
+        // ── ChartView (Candlestick for price, Line for others) ──────────────────────────────
+        function ChartView({ candles = [], field = 'close', label, color }) {
+            const ref      = useRef(null);
+            const chartRef = useRef(null);
+            const isCandle = field === 'close';
+
+            useEffect(() => {
+                if (!ref.current || !candles.length) return;
+                if (chartRef.current) chartRef.current.destroy();
+
+                const commonOptions = {
+                    responsive: true, maintainAspectRatio: false,
+                    animation: { duration: 200 },
+                    plugins: {
+                        legend: { labels: { color: '#8892b0', font: { size: 11 } } },
+                        tooltip: { backgroundColor: '#0e1628', borderColor: '#1e2a45', borderWidth: 1 }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { unit: 'minute', displayFormats: { minute: 'HH:mm' } },
+                            ticks: { color: '#8892b0', font: { size: 10 }, maxRotation: 0, maxTicksLimit: 10 },
+                            grid: { color: 'rgba(255,255,255,0.04)' },
+                        },
+                        y: {
+                            ticks: { color: '#8892b0', font: { size: 10 } },
+                            grid: { color: 'rgba(255,255,255,0.04)' }
+                        }
+                    }
+                };
+
+                if (isCandle) {
+                    // ── Candlestick chart ───────────────────────────────────────
+                    const data = candles.map(c => ({
+                        x: new Date(c.timestamp).getTime(),
+                        o: c.open  || c.close,
+                        h: c.high  || c.close,
+                        l: c.low   || c.close,
+                        c: c.close,
+                    }));
+                    chartRef.current = new Chart(ref.current, {
+                        type: 'candlestick',
+                        data: {
+                            datasets: [{
+                                label: 'Price',
+                                data,
+                                color: { up: '#00e676', down: '#ff3d57', unchanged: '#8892b0' },
+                                borderColor: { up: '#00e676cc', down: '#ff3d57cc', unchanged: '#8892b0cc' },
+                                borderWidth: 1,
+                            }]
+                        },
+                        options: commonOptions,
+                    });
+                } else {
+                    // ── Line chart for Volume / RSI / Vol Z-Score ───────────────────
+                    const values = candles.map(c => ({ x: new Date(c.timestamp).getTime(), y: c[field] ?? 0 }));
+                    chartRef.current = new Chart(ref.current, {
+                        type: 'line',
+                        data: {
+                            datasets: [{
+                                label: label || field,
+                                data: values,
+                                borderColor: color || '#4f8ef7',
+                                backgroundColor: (color || '#4f8ef7') + '18',
+                                borderWidth: 1.5,
+                                pointRadius: 0,
+                                fill: true,
+                                tension: 0.2,
+                            }]
+                        },
+                        options: {
+                            ...commonOptions,
+                            interaction: { mode: 'index', intersect: false },
+                        },
+                    });
+                }
+
+                return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+            }, [candles, field]);
+
+            return <div className="chart-container"><canvas ref={ref} /></div>;
+        }
+
+        // ── ChartPanel ────────────────────────────────────────────────────────────────
+        // Time ranges — 'all' is the default so data always shows even when market closed
+        const TIME_RANGES = [
+            { id: 'all',   label: 'All',   minutes: Infinity },
+            { id: '30m',   label: '30m',   minutes: 30  },
+            { id: '1h',    label: '1H',    minutes: 60  },
+            { id: '2h',    label: '2H',    minutes: 120 },
+            { id: 'today', label: 'Today', minutes: null },
+        ];
+
+        function ChartPanel({ ticker }) {
+            const [tab,   setTab]   = useState('close');
+            const [range, setRange] = useState('all');
+
+            const { data, loading } = useFetch(
+                ticker ? `${API}/ticker/${ticker}/chart?n=200` : null,
+                CHART_INTERVAL
+            );
+            const allCandles = data?.candles || [];
+
+            // Filter relative to the LATEST candle (not Date.now()) so ranges work even when markets are closed
+            const { candles, usedFallback } = React.useMemo(() => {
+                if (!allCandles.length) return { candles: [], usedFallback: false };
+                const sel = TIME_RANGES.find(r => r.id === range);
+                let filtered = allCandles;
+                if (sel && sel.minutes !== Infinity) {
+                    const latestMs = new Date(allCandles[allCandles.length - 1].timestamp).getTime();
+                    if (sel.minutes === null) {
+                        // 'Today' — same calendar date as latest candle
+                        const latestDate = new Date(latestMs).toDateString();
+                        filtered = allCandles.filter(c => new Date(c.timestamp).toDateString() === latestDate);
+                    } else {
+                        const cutoff = latestMs - sel.minutes * 60 * 1000;
+                        filtered = allCandles.filter(c => new Date(c.timestamp).getTime() >= cutoff);
+                    }
+                }
+                if (filtered.length === 0 && allCandles.length > 0) {
+                    return { candles: allCandles, usedFallback: true };
+                }
+                return { candles: filtered, usedFallback: false };
+            }, [allCandles, range]);
+
+            // Detect last bar time (for the session notice)
+            const lastBarTime = candles.length
+                ? new Date(candles[candles.length - 1].timestamp)
+                : null;
+            const lastBarLabel = lastBarTime
+                ? lastBarTime.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' })
+                  + ' ' + String(lastBarTime.getHours()).padStart(2,'0')
+                  + ':' + String(lastBarTime.getMinutes()).padStart(2,'0')
+                : null;
+
+            const dataFields = [
+                { id: 'close',   label: 'Price',       color: '#4f8ef7' },
+                { id: 'volume',  label: 'Volume',      color: '#7c5be8' },
+                { id: 'rsi',     label: 'RSI',         color: '#00e676' },
+                { id: 'vol_z',   label: 'Vol Z-Score', color: '#ff9100' },
+            ];
+            const activeField = dataFields.find(f => f.id === tab) || dataFields[0];
+
+            return (
+                <div className="card chart-panel">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                            <div>
+                                <div className="section-title" style={{ marginBottom: 2 }}>Market Data</div>
+                                <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>{ticker || '—'}</div>
+                            </div>
+                            <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: 'rgba(79,142,247,0.15)', color: '#4f8ef7', letterSpacing: '0.06em' }}>
+                                1m
+                            </span>
+                            {candles.length > 0 && (
+                                <span style={{ fontSize: '0.65rem', color: 'var(--text2)' }}>{candles.length} bars</span>
+                            )}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <div className="chart-tabs">
+                                {TIME_RANGES.map(r => (
+                                    <button key={r.id} className={`tab-btn ${range === r.id ? 'active' : ''}`} onClick={() => setRange(r.id)}>
+                                        {r.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="chart-tabs">
+                                {dataFields.map(f => (
+                                    <button key={f.id}
+                                        className={`tab-btn ${tab === f.id ? 'active' : ''}`}
+                                        style={tab === f.id ? { background: f.color + 'cc', borderColor: f.color } : {}}
+                                        onClick={() => setTab(f.id)}>
+                                        {f.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Last-session fallback notice */}
+                    {usedFallback && lastBarLabel && (
+                        <div style={{ fontSize: '0.68rem', color: '#ffd740', marginBottom: 10,
+                                      padding: '5px 10px', background: 'rgba(255,215,64,0.07)',
+                                      borderRadius: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span>🌙</span>
+                            <span>Market closed — showing last session data up to <strong>{lastBarLabel}</strong></span>
+                        </div>
+                    )}
+
+                    {loading ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><div className="spinner" /></div>
+                    ) : !allCandles.length ? (
+                        <div className="empty">
+                            <div className="icon">📊</div>
+                            <p>No chart data available.</p>
+                            <p style={{ fontSize: '0.75rem', marginTop: 8 }}>Start the backend and ensure yfinance is reachable.</p>
+                        </div>
+                    ) : (
+                        <ChartView candles={candles} field={activeField.id} label={activeField.label} color={activeField.color} />
+                    )}
+                </div>
+            );
+        }
+
+        // ── StatusPanel ────────────────────────────────────────────────────────────────
+        function StatusPanel({ ticker }) {
+            const { data, loading } = useFetch(ticker ? `${API}/ticker/${ticker}/status` : null, METRICS_INTERVAL);
+            if (!ticker) return null;
+            if (loading) return <div className="card" style={{ padding: 32, display: 'flex', justifyContent: 'center' }}><div className="spinner" /></div>;
+
+            const mkt = data?.market || {};
+            const pred = data?.prediction || {};
+
+            return (
+                <div className="card">
+                    <div className="section-title">Live Metrics — {ticker}</div>
+                    <div className="stats-row">
+                        {[
+                            { label: 'Price', value: fmtPrice(mkt.latest_price, ticker) },
+                            { label: 'RSI', value: fmtNum(mkt.rsi, 1) },
+                            { label: 'MACD', value: fmtNum(mkt.macd, 4) },
+                            { label: 'Vol Z', value: fmtNum(mkt.abnormal_vol, 2) },
+                            { label: 'Return 1h', value: fmtPct(mkt.returns_1h) },
+                        ].map(s => (
+                            <div className="stat-pill" key={s.label}>
+                                <span className="label">{s.label}</span>
+                                <span style={{ fontWeight: 600 }}>{s.value}</span>
+                            </div>
+                        ))}
+                    </div>
+                    {pred.manipulation_probability != null && (
+                        <div style={{ marginTop: 16 }}>
+                            <div className="section-title" style={{ marginBottom: 8 }}>Model Prediction</div>
+                            <div className="metric-grid">
+                                {[
+                                    { label: 'Manipulation Prob', value: `${(pred.manipulation_probability * 100).toFixed(1)}%`, color: gaugeColor(pred.manipulation_probability) },
+                                    { label: 'Volume Anomaly', value: `${(pred.volume_anomaly * 100).toFixed(1)}%`, color: '#ff9100' },
+                                    { label: 'Sentiment Surge', value: `${(pred.sentiment_surge * 100).toFixed(1)}%`, color: '#7c5be8' },
+                                    { label: 'Lead-Lag Score', value: fmtNum(pred.lead_lag_score, 3), color: '#00e676' },
+                                ].map(m => (
+                                    <div className="metric-item" key={m.label}>
+                                        <div className="metric-value" style={{ color: m.color, fontSize: '1.3rem' }}>{m.value}</div>
+                                        <div className="metric-label">{m.label}</div>
+                                    </div>
+                                ))}
+                            </div>
+                            {/* Confidence Meter — shown when MC Dropout data is available */}
+                            <ConfidenceMeter
+                                confidence_score={pred.confidence_score ?? pred.manipulation_probability}
+                                confidence_level={pred.confidence_level || 'Unknown'}
+                                uncertainty={pred.uncertainty ?? 0}
+                                confidence_interval={pred.confidence_interval || [pred.manipulation_probability, pred.manipulation_probability]}
+                            />
+                        </div>
+                    )}
+                    {!pred.manipulation_probability && (
+                        <div style={{ marginTop: 16, padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 8, fontSize: '0.78rem', color: 'var(--text2)' }}>
+                            ℹ️ Train the model first to see predictions. Run: <code>python scripts/04_train_model.py</code>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ── AlertsPanel ────────────────────────────────────────────────────────────────
+        function AlertsPanel() {
+            const [tickerFilter, setTickerFilter] = useState('');
+            const [sevFilter,    setSevFilter]    = useState('ALL');
+
+            // Fetch full history (backend keeps last 500)
+            const { data, loading, reload } = useFetch(`${API}/alerts?limit=500`, REFRESH_INTERVAL);
+            const allAlerts = data?.alerts || [];
+
+            // Client-side filter
+            const alerts = React.useMemo(() => {
+                let a = allAlerts;
+                if (tickerFilter.trim()) {
+                    const q = tickerFilter.trim().toUpperCase();
+                    a = a.filter(x => (x.ticker || '').toUpperCase().includes(q));
+                }
+                if (sevFilter !== 'ALL') {
+                    a = a.filter(x => (x.severity || '').toUpperCase() === sevFilter);
+                }
+                return a;
+            }, [allAlerts, tickerFilter, sevFilter]);
+
+            // Group by date label
+            const grouped = React.useMemo(() => {
+                const groups = [];
+                let lastDate = null;
+                alerts.forEach(a => {
+                    const d   = a.timestamp ? new Date(a.timestamp) : null;
+                    const lbl = d ? d.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : 'Unknown date';
+                    if (lbl !== lastDate) { groups.push({ type: 'header', label: lbl }); lastDate = lbl; }
+                    groups.push({ type: 'row', alert: a });
+                });
+                return groups;
+            }, [alerts]);
+
+            const SEV_OPTIONS = ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+            const sevColor    = { CRITICAL: '#ff3d57', HIGH: '#ff9100', MEDIUM: '#ffd740', LOW: '#00e676' };
+
+            return (
+                <div className="card">
+                    {/* Header row */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div className="section-title" style={{ margin: 0 }}>Alert History</div>
+                            <span style={{ fontSize: '0.65rem', color: 'var(--text2)' }}>
+                                {alerts.length} / {allAlerts.length} alerts
+                            </span>
+                        </div>
+                        <button className="refresh-btn" onClick={reload}>↻ Refresh</button>
+                    </div>
+
+                    {/* Filter bar */}
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <input
+                            value={tickerFilter}
+                            onChange={e => setTickerFilter(e.target.value)}
+                            placeholder="Filter ticker…"
+                            style={{
+                                background: 'var(--surface2)', border: '1px solid var(--border)',
+                                borderRadius: 6, padding: '5px 10px', color: 'var(--text)',
+                                fontFamily: 'Inter, sans-serif', fontSize: '0.78rem', width: 130,
+                                outline: 'none',
+                            }}
+                        />
+                        <div style={{ display: 'flex', gap: 4 }}>
+                            {SEV_OPTIONS.map(s => (
+                                <button key={s} onClick={() => setSevFilter(s)}
+                                    style={{
+                                        padding: '4px 10px', borderRadius: 6, fontSize: '0.65rem',
+                                        fontWeight: 700, fontFamily: 'Inter, sans-serif', cursor: 'pointer',
+                                        border: sevFilter === s ? `1px solid ${sevColor[s] || 'var(--accent)'}` : '1px solid var(--border)',
+                                        background: sevFilter === s
+                                            ? `${(sevColor[s] || '#4f8ef7')}22`
+                                            : 'var(--surface2)',
+                                        color: sevFilter === s ? (sevColor[s] || '#4f8ef7') : 'var(--text2)',
+                                    }}>
+                                    {s}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {loading ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><div className="spinner" /></div>
+                    ) : !allAlerts.length ? (
+                        <div className="empty">
+                            <div className="icon">🔔</div>
+                            <p>No alerts yet.</p>
+                            <p style={{ fontSize: '0.75rem', marginTop: 8 }}>Alerts appear when manipulation probability exceeds threshold.</p>
+                        </div>
+                    ) : !alerts.length ? (
+                        <div className="empty" style={{ padding: 24 }}>
+                            <p style={{ color: 'var(--text2)', fontSize: '0.85rem' }}>No alerts match your filter.</p>
+                        </div>
+                    ) : (
+                        <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+                            <table className="alert-table" style={{ width: '100%' }}>
+                                <thead style={{ position: 'sticky', top: 0, background: 'var(--bg2)', zIndex: 2 }}>
+                                    <tr>
+                                        <th>Ticker</th><th>Severity</th><th>Message</th><th>Prob</th><th>Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {grouped.map((item, i) => item.type === 'header' ? (
+                                        <tr key={`h-${i}`}>
+                                            <td colSpan={5} style={{
+                                                padding: '8px 12px 4px',
+                                                fontSize: '0.62rem', fontWeight: 700,
+                                                letterSpacing: '0.08em', textTransform: 'uppercase',
+                                                color: 'var(--text2)', background: 'rgba(255,255,255,0.02)',
+                                                borderBottom: '1px solid var(--border)',
+                                            }}>
+                                                📅 {item.label}
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        <tr key={item.alert.id || item.alert.timestamp}>
+                                            <td style={{ fontWeight: 700 }}>{item.alert.ticker}</td>
+                                            <td>
+                                                <span className={`sev-chip badge-${(item.alert.severity || '').toUpperCase()}`}>
+                                                    {item.alert.severity}
+                                                </span>
+                                            </td>
+                                            <td style={{ color: 'var(--text2)', maxWidth: 300, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {item.alert.message}
+                                            </td>
+                                            <td style={{ color: gaugeColor(item.alert.probability || 0), fontWeight: 600 }}>
+                                                {item.alert.probability ? `${(item.alert.probability * 100).toFixed(0)}%` : '—'}
+                                            </td>
+                                            <td style={{ color: 'var(--text2)', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                                                {timeAgo(item.alert.timestamp)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ── MetricsPanel ───────────────────────────────────────────────────────────────
+        function MetricsPanel() {
+            const { data: mData } = useFetch(`${API}/analysis/metrics`);
+            const { data: pData } = useFetch(`${API}/analysis/plots`);
+            const { data: hData } = useFetch(`${API}/analysis/history`);
+
+            const metrics = mData?.metrics || {};
+            const plots = pData?.plots || [];
+
+            const bigMetrics = [
+                { label: 'F1 Score', value: metrics.f1 != null ? metrics.f1.toFixed(3) : '—', color: '#4f8ef7' },
+                { label: 'ROC-AUC', value: metrics.roc_auc != null ? metrics.roc_auc.toFixed(3) : '—', color: '#7c5be8' },
+                { label: 'Precision', value: metrics.precision != null ? metrics.precision.toFixed(3) : '—', color: '#00e676' },
+                { label: 'Recall', value: metrics.recall != null ? metrics.recall.toFixed(3) : '—', color: '#ffd740' },
+                { label: 'False Alarms', value: metrics.false_alarm_rate != null ? `${(metrics.false_alarm_rate * 100).toFixed(1)}%` : '—', color: '#ff9100' },
+                { label: 'Accuracy', value: metrics.accuracy != null ? `${(metrics.accuracy * 100).toFixed(1)}%` : '—', color: '#00e676' },
+            ];
+
+            return (
+                <div>
+                    <div className="section-title">Model Performance</div>
+                    {!mData?.available ? (
+                        <div className="card">
+                            <div className="empty">
+                                <div className="icon">🧠</div>
+                                <p>Train the model first to see evaluation metrics.</p>
+                                <p style={{ fontSize: '0.75rem', marginTop: 8, color: 'var(--text2)' }}>
+                                    Run: <code>python scripts/04_train_model.py</code> then <code>python scripts/05_evaluate_model.py</code>
+                                </p>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="card" style={{ marginBottom: 16 }}>
+                                <div className="metric-grid">
+                                    {bigMetrics.map(m => (
+                                        <div className="metric-item" key={m.label}>
+                                            <div className="metric-value" style={{ color: m.color }}>{m.value}</div>
+                                            <div className="metric-label">{m.label}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div style={{ marginTop: 16, display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: '0.75rem', color: 'var(--text2)' }}>
+                                    {metrics.n_samples && <span>Samples: <b style={{ color: 'var(--text)' }}>{metrics.n_samples.toLocaleString()}</b></span>}
+                                    {metrics.n_positive && <span>Positives: <b style={{ color: 'var(--red)' }}>{metrics.n_positive}</b></span>}
+                                    {metrics.threshold && <span>Threshold: <b style={{ color: 'var(--text)' }}>{metrics.threshold.toFixed(2)}</b></span>}
+                                    {metrics.timestamp && <span>Evaluated: <b style={{ color: 'var(--text)' }}>{timeAgo(metrics.timestamp)}</b></span>}
+                                </div>
+                            </div>
+                            {plots.length > 0 && (
+                                <div className="plots-grid">
+                                    {plots.map(p => (
+                                        <div className="card plot-card" key={p.name}>
+                                            <div className="plot-title">{p.name.replace(/_/g, ' ')}</div>
+                                            <img src={`${API}/analysis/plot/${p.file}`} alt={p.name}
+                                                onError={e => e.target.style.display = 'none'} />
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            );
+        }
+
+        // ── LiveClock ─────────────────────────────────────────────────────────────────
+        function LiveClock() {
+            const [now, setNow] = useState(new Date());
+            useEffect(() => {
+                const t = setInterval(() => setNow(new Date()), 1000);
+                return () => clearInterval(t);
+            }, []);
+            return <span className="last-updated">🕐 {now.toLocaleTimeString()}</span>;
+        }
+
+        // ── App ─────────────────────────────────────────────────────────────────────────────
+        function App() {
+            const [tab, setTab] = useState('monitor');
+            const [sel, setSel] = useState(TICKERS[0]);
+            const [serverOk, setServerOk] = useState(false);
+
+            // Quick tickers list with predictions
+            const { data: tickersData, loading: tLoad, reload } = useFetch(`${API}/tickers`, REFRESH_INTERVAL);
+            const tickers = tickersData?.tickers || TICKERS.map(t => ({ ticker: t }));
+
+            // Health check
+            useEffect(() => {
+                fetch(`${window.location.origin}/health`)
+                    .then(r => r.ok ? setServerOk(true) : setServerOk(false))
+                    .catch(() => setServerOk(false));
+            }, []);
+
+            return (
+                <div className="app">
+                    <header>
+                        <div className="logo">
+                            <div className="logo-icon">🛡</div>
+                            <span className="glow-header">StockGuard AI</span>
+                        </div>
+                        <div className="header-right">
+                            <div className="live-badge">
+                                <div className="status-dot" style={{
+                                    background: serverOk ? 'var(--green)' : 'var(--red)',
+                                    boxShadow: `0 0 8px ${serverOk ? 'var(--green)' : 'var(--red)'}`
+                                }} />
+                                <span>{serverOk ? 'LIVE' : 'OFFLINE'}</span>
+                            </div>
+                            <LiveClock />
+                            <button className="refresh-btn" onClick={reload}>↻ Refresh</button>
+                        </div>
+                    </header>
+
+                    <main>
+                        <div className="nav-tabs">
+                            {[['monitor', '📡 Monitor'], ['analysis', '📊 Analysis'], ['alerts', '🔔 Alerts']].map(([id, label]) => (
+                                <button key={id} className={`nav-tab ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>{label}</button>
+                            ))}
+                        </div>
+
+                        {tab === 'monitor' && (
+                            <>
+                                <div className="section-title">Monitored Tickers</div>
+                                <div className="grid-6" style={{ marginBottom: 24 }}>
+                                    {tickers.map(t => (
+                                        <TickerCard key={t.ticker} data={t} selected={sel === t.ticker}
+                                            onClick={() => setSel(t.ticker)} />
+                                    ))}
+                                </div>
+                                <div className="grid-2" style={{ marginBottom: 24 }}>
+                                    <ChartPanel ticker={sel} />
+                                    <StatusPanel ticker={sel} />
+                                </div>
+                            </>
+                        )}
+
+                        {tab === 'analysis' && <MetricsPanel />}
+
+                        {tab === 'alerts' && <AlertsPanel />}
+                    </main>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+
+</html>
